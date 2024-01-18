@@ -21,6 +21,8 @@ const (
 	BlockEventsKind       = "block_events"
 	TransactionsKind      = "transactions"
 	TransactionEventsKind = "transaction_events"
+	PeerNewHeadKind       = "peer_new_head"
+	NumbersKind           = "numbers"
 )
 
 // Datastore wraps the datastore client, stores the sensorID, and other
@@ -43,6 +45,7 @@ type Datastore struct {
 type DatastoreEvent struct {
 	SensorId string
 	PeerId   string
+	Number   *datastore.Key
 	Hash     *datastore.Key
 	Time     time.Time
 }
@@ -126,6 +129,20 @@ func NewDatastore(ctx context.Context, opts DatastoreOptions) Database {
 	}
 }
 
+func (d *Datastore) WriteNewHead(ctx context.Context, peer *enode.Node, header *types.Header, td *big.Int) {
+	if d.client == nil {
+		return
+	}
+
+	if d.ShouldWriteBlockEvents() {
+		d.jobs <- struct{}{}
+		go func() {
+			d.writeEvent(peer, PeerNewHeadKind, header.Number, header.Hash(), BlocksKind)
+			<-d.jobs
+		}()
+	}
+}
+
 // WriteBlock writes the block and the block event to datastore.
 func (d *Datastore) WriteBlock(ctx context.Context, peer *enode.Node, block *types.Block, td *big.Int) {
 	if d.client == nil {
@@ -135,7 +152,7 @@ func (d *Datastore) WriteBlock(ctx context.Context, peer *enode.Node, block *typ
 	if d.ShouldWriteBlockEvents() {
 		d.jobs <- struct{}{}
 		go func() {
-			d.writeEvent(peer, BlockEventsKind, block.Hash(), BlocksKind)
+			d.writeEvent(peer, BlockEventsKind, block.Number(), block.Hash(), BlocksKind)
 			<-d.jobs
 		}()
 	}
@@ -370,11 +387,12 @@ func (d *Datastore) writeBlock(ctx context.Context, block *types.Block, td *big.
 
 // writeEvent writes either a block or transaction event to datastore depending
 // on the provided eventKind and hashKind.
-func (d *Datastore) writeEvent(peer *enode.Node, eventKind string, hash common.Hash, hashKind string) {
+func (d *Datastore) writeEvent(peer *enode.Node, eventKind string, number *big.Int, hash common.Hash, hashKind string) {
 	key := datastore.IncompleteKey(eventKind, nil)
 	event := DatastoreEvent{
 		SensorId: d.sensorID,
 		PeerId:   peer.URLv4(),
+		Number:   datastore.NameKey(NumbersKind, number.String(), nil),
 		Hash:     datastore.NameKey(hashKind, hash.Hex(), nil),
 		Time:     time.Now(),
 	}

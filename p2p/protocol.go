@@ -413,6 +413,9 @@ func (c *conn) handleNewBlock(ctx context.Context, msg ethp2p.Msg) error {
 		}
 
 		c.logger.Info().Interface("head", c.head).Msg("Setting head block")
+		go func() {
+			c.db.WriteNewHead(ctx, c.node, block.Block.Header(), block.TD)
+		}()
 	}
 	c.headMutex.Unlock()
 

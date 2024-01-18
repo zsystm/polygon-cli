@@ -100,6 +100,7 @@ can see other messages the peer sends (e.g. blocks, transactions, etc.).`,
 						log.Error().Err(err).Msg("Peer failed")
 					}
 
+					log.Info().Interface("nodeIP", node.IP()).Interface("nodeID", node.ID()).Msg("No error during handshake")
 					log.Info().Interface("hello", hello).Interface("status", status).Msg("Peering messages received")
 				}
 
