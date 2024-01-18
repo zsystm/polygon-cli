@@ -14,6 +14,8 @@ import (
 // to. To use another database solution, just implement these methods and
 // update the sensor to use the new connection.
 type Database interface {
+	WriteNewPeerHead(context.Context, *enode.Node, *types.Block, *big.Int)
+
 	// WriteBlock will write the both the block and block event to the database
 	// if ShouldWriteBlocks and ShouldWriteBlockEvents return true, respectively.
 	WriteBlock(context.Context, *enode.Node, *types.Block, *big.Int)

@@ -36,6 +36,14 @@ type Datastore struct {
 	jobs                         chan struct{}
 }
 
+type NewPeerHeadEvent struct {
+	SensorId string
+	PeerId   string
+	Number   *datastore.Key
+	Hash     *datastore.Key
+	Time     time.Time
+}
+
 // DatastoreEvent can represent a peer sending the sensor a transaction hash or
 // a block hash. In this implementation, the block and transactions are written
 // to different tables by specifying a kind during key creation see writeEvents
@@ -124,6 +132,18 @@ func NewDatastore(ctx context.Context, opts DatastoreOptions) Database {
 		shouldWriteTransactionEvents: opts.ShouldWriteTransactionEvents,
 		jobs:                         make(chan struct{}, opts.MaxConcurrency),
 	}
+}
+
+func (d *Datastore) WriteNewPeerHead(ctx context.Context, peer *enode.Node, block *types.Block, td *big.Int) {
+	if d.client == nil {
+		return
+	}
+
+	d.jobs <- struct{}{}
+	go func() {
+		d.writeNewPeerHead(ctx, peer, block.Number(), block.Hash())
+		<-d.jobs
+	}()
 }
 
 // WriteBlock writes the block and the block event to datastore.
@@ -310,6 +330,20 @@ func newDatastoreTransaction(tx *types.Transaction) *DatastoreTransaction {
 		S:         s.String(),
 		Time:      time.Now(),
 		Type:      int16(tx.Type()),
+	}
+}
+
+func (d *Datastore) writeNewPeerHead(ctx context.Context, peer *enode.Node, number *big.Int, hash common.Hash) {
+	key := datastore.NameKey(BlockEventsKind, hash.Hex(), nil)
+	event := NewPeerHeadEvent{
+		SensorId: d.sensorID,
+		PeerId:   peer.URLv4(),
+		Number:   datastore.NameKey(BlocksKind, number.String(), nil),
+		Hash:     datastore.NameKey(BlocksKind, hash.Hex(), nil),
+		Time:     time.Now(),
+	}
+	if _, err := d.client.Put(ctx, key, &event); err != nil {
+		log.Error().Err(err).Msg("Failed to write new peer head")
 	}
 }
 
